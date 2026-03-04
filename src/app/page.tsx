@@ -8,20 +8,24 @@ export default function Home() {
   const [stage, setStage] = useState<"LOBBY" | "GAME">("LOBBY");
   const [roomId, setRoomId] = useState("");
   const [gameState, setGameState] = useState<any>(null);
+  const [players, setPlayers] = useState<any[]>([]);
+  const [hostId, setHostId] = useState("");
 
   useEffect(() => {
     socket.connect();
 
-    socket.on("room_created", ({ roomId }) => {
-      console.log("ได้รับรหัสห้องแล้ว:", roomId); // ลองใส่ log เช็กดู
-      setRoomId(roomId); // ✅ เมื่อ State นี้เปลี่ยน UI ใน Lobby จะเปลี่ยนตาม
+    socket.on("room_created", ({ roomId, hostId, playerName }) => {
+      socket.emit("join_room", { roomId: roomId, playerName: playerName });
     });
 
-    socket.on("player_joined", (players) => {
-      console.log("มีเพื่อนจอยเข้ามา:", players);
+    socket.on("room_update", ({ players, hostId, roomId }) => {
+      setPlayers(players);
+      setHostId(hostId);
+      setRoomId(roomId);
     });
 
     socket.on("game_started", (data) => {
+      console.log("เกมเริ่มแล้ว! ข้อมูลเริ่มต้น:", data);
       setGameState(data);
       setStage("GAME");
     });
@@ -32,7 +36,7 @@ export default function Home() {
 
     return () => {
       socket.off("room_created");
-      socket.off("player_joined");
+      socket.off("room_update");
       socket.off("game_started");
       socket.off("turn_result");
     };
@@ -45,7 +49,12 @@ export default function Home() {
       </h1>
 
       {stage === "LOBBY" ? (
-        <Lobby setRoomId={setRoomId} roomId={roomId} />
+        <Lobby
+          setRoomId={setRoomId}
+          roomId={roomId}
+          players={players}
+          hostId={hostId}
+        />
       ) : (
         <GameBoard gameState={gameState} roomId={roomId} />
       )}
