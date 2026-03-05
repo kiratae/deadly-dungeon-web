@@ -10,6 +10,7 @@ export default function Home() {
   const [gameState, setGameState] = useState<any>(null);
   const [players, setPlayers] = useState<any[]>([]);
   const [hostId, setHostId] = useState("");
+  const [initialSpawn, setInitialSpawn] = useState<any>(null);
 
   useEffect(() => {
     socket.connect();
@@ -27,19 +28,13 @@ export default function Home() {
     socket.on("game_started", (data) => {
       console.log("เกมเริ่มแล้ว! ข้อมูลเริ่มต้น:", data);
       setGameState(data);
+      setInitialSpawn(data);
       setStage("GAME");
     });
-
-    socket.on("turn_result", (data) => {
-      console.log("ผลลัพธ์เทิร์น:", data);
-      setGameState((prev: any) => ({ ...prev, ...data }));
-    });
-
     return () => {
       socket.off("room_created");
       socket.off("room_update");
       socket.off("game_started");
-      socket.off("turn_result");
     };
   }, []);
 
@@ -57,7 +52,7 @@ export default function Home() {
           hostId={hostId}
         />
       ) : (
-        <GameBoard gameState={gameState} roomId={roomId} />
+        <GameBoard initialData={initialSpawn} roomId={roomId} socket={socket} />
       )}
     </main>
   );

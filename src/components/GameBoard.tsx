@@ -1,55 +1,123 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { socket } from "@/lib/socket";
-import Controls from "./Controls";
-import {
-  Timer,
-  UserCheck,
-  History,
-  DoorOpen,
-  Ghost,
-  ShieldAlert,
-} from "lucide-react";
+import { ArrowRight, History, Trophy } from "lucide-react";
 import RoomDisplay from "./RoomDisplay";
 import ProximityChat from "./ProximityChat";
 import DigitalNote from "./DigitalNote";
+import SubmissionModal from "./SubmissionModal";
+import LogItem from "./LogItem";
 
-export default function GameBoard({ gameState, roomId }: any) {
+export default function GameBoard({ initialData, roomId, socket }: any) {
   const [pendingPlayers, setPendingPlayers] = useState<string[]>([]);
   // โครงสร้างของข้อมูลที่จด: { "x-y": { id: "12", doors: { N: true, E: false, ... } } }
   const [notes, setNotes] = useState<{ [key: string]: any }>({});
-  const [turnLog, setTurnLog] = useState<any[]>([]); // สำหรับเก็บประวัติรายเทิร์น
-  const [showTurnPopup, setShowTurnPopup] = useState(false); // สำหรับ Popup แจ้งเตือน
+
+  const [showTurnPopup, setShowTurnPopup] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isPreview, setIsPreview] = useState(false);
+  const [readyInfo, setReadyInfo] = useState({ readyCount: 0, totalCount: 0 });
+  const [isLocalReady, setIsLocalReady] = useState(false);
+
+  const currentRoomRef = useRef(initialData.roomNumber);
+  const turnNumberRef = useRef(initialData.turnNumber);
+  const lastMoveDirRef = useRef<string | null>(null);
+
+  const [turnLog, setTurnLog] = useState<any[]>([
+    {
+      type: "SPAWN",
+      turn: 0,
+      to: initialData.roomNumber,
+      doors: initialData.doors,
+      note: "ตื่นขึ้นในดันเจี้ยน",
+    },
+  ]);
+  const [currentStandingRoom, setCurrentStandingRoom] = useState<number>(
+    initialData.roomNumber,
+  );
+  const [gameState, setGameState] = useState(initialData);
 
   useEffect(() => {
-    if (!gameState.turnNumber || !gameState.roomNumber) return;
+    socket.on("move_result", (data) => {
+      console.log("ผลลัพธ์การเดิน:", data);
 
-    setTurnLog((prev) => {
-      // 🛡️ ตรวจสอบก่อนว่าเทิร์นนี้ถูกบันทึกไปแล้วหรือยัง
-      const isAlreadyLogged = prev.some(
-        (log) => log.turn === gameState.turnNumber,
-      );
+      setGameState((prev: any) => ({
+        ...prev,
+        roomNumber: data.nextRoom,
+        doors: data.doors,
+        isAnswerRoom: data.isAnswerRoom,
+        hasMoved: true, // ล็อกการเดิน
+      }));
 
-      if (isAlreadyLogged) {
-        return prev; // ถ้ามีแล้ว ไม่ต้องทำอะไร ส่ง State เดิมกลับไป
-      }
+      setTurnLog((prev) => {
+        const turnNum = data.turnNumber || turnNumberRef.current;
+        const otherLogs = prev.filter(
+          (log) => !(log.type === "MOVE" && log.turn === turnNum),
+        );
 
-      // ถ้ายังไม่มี ให้สร้าง Entry ใหม่
-      const newEntry = {
-        turn: gameState.turnNumber,
-        room: gameState.roomNumber,
-        doors: gameState.doors,
-      };
+        return [
+          {
+            type: "MOVE",
+            turn: turnNum,
+            from: currentRoomRef.current,
+            to: data.nextRoom,
+            doors: data.doors,
+            via: lastMoveDirRef.current,
+            isAnswerRoom: data.isAnswerRoom,
+          },
+          ...otherLogs,
+        ];
+      });
 
-      return [newEntry, ...prev];
+      setIsPreview(true);
     });
 
-    // แสดง Popup แจ้งเทิร์นใหม่
-    setShowTurnPopup(true);
-    const timer = setTimeout(() => setShowTurnPopup(false), 2000);
+    socket.on("turn_result", (data) => {
+      console.log("turn_result:", data);
+      setGameState((prev: any) => ({ ...prev, ...data }));
+      setIsPreview(false);
+      setIsLocalReady(false);
 
-    return () => clearTimeout(timer);
-  }, [gameState.turnNumber, gameState.roomNumber, gameState.doors]); // ตรวจสอบทั้งคู่เพื่อความแม่นยำ
+      currentRoomRef.current = data.roomNumber;
+    });
+
+    socket.on("waiting_update", ({ pendingPlayers }) => {
+      setPendingPlayers(pendingPlayers);
+    });
+
+    socket.on("waiting_ready", ({ readyCount, totalCount }) => {
+      setReadyInfo({ readyCount, totalCount });
+    });
+
+    socket.on("start_next_turn", ({ turnNumber, pendingPlayers }) => {
+      turnNumberRef.current = turnNumber;
+      // รีเซ็ตสถานะทั้งหมดเพื่อเริ่มเทิร์นใหม่
+      setGameState((prev: any) => ({
+        ...prev,
+        turnNumber: turnNumber,
+        turnProcessed: false, // ปิดโหมดจบเทิร์น
+        hasMoved: false, // เปิดให้เดินได้ใหม่
+        pendingPlayers: pendingPlayers,
+      }));
+
+      // รีเซ็ต UI ท้องถิ่น
+      setIsLocalReady(false);
+      setReadyInfo({ readyCount: 0, totalCount: 0 });
+
+      // แสดง Popup Turn Start (อันเดิมที่เราทำไว้)
+      setShowTurnPopup(true);
+      const timer = setTimeout(() => setShowTurnPopup(false), 2000);
+      return () => clearTimeout(timer);
+    });
+
+    return () => {
+      socket.off("move_result");
+      socket.off("turn_result");
+      socket.off("waiting_update");
+      socket.off("waiting_ready");
+      socket.off("start_next_turn");
+    };
+  }, [socket, gameState.turnNumber]);
 
   useEffect(() => {
     if (gameState.pendingPlayers) {
@@ -59,70 +127,97 @@ export default function GameBoard({ gameState, roomId }: any) {
     }
   }, [gameState.pendingPlayers]);
 
-  useEffect(() => {
-    socket.on("waiting_update", ({ pendingPlayers }) => {
-      setPendingPlayers(pendingPlayers);
-    });
-    return () => {
-      socket.off("waiting_update");
-    };
-  }, []);
+  const handleReadyClick = () => {
+    setIsLocalReady(true);
+    socket.emit("ready_for_next_turn", { roomId });
+  };
+
+  const handleFinalSubmit = (submittedMap: number[]) => {
+    socket.emit("submit_final_map", { roomId, submittedMap });
+    setIsModalOpen(false);
+  };
+
+  const handleMove = (dir: string) => {
+    if (gameState.hasMoved) return;
+    lastMoveDirRef.current = dir;
+    socket.emit("player_move", { roomId, direction: dir });
+  };
 
   return (
     <div className="mmax-w-[1400px] mx-auto grid grid-cols-12 gap-6 p-6">
       {/* 1. Left Sidebar: Digital Mapping */}
-      <div className="col-span-12 lg:col-span-3">
+      <div className="col-span-12 lg:col-span-5">
         <DigitalNote
           notes={notes}
-          onNoteChange={(x, y, data) =>
-            setNotes((prev) => ({ ...prev, [`${x}-${y}`]: data }))
-          }
+          setNotes={setNotes}
         />
       </div>
 
       {/* 2. Center: Game Core (Room Display & Controls) */}
-      <div className="col-span-12 lg:col-span-6 space-y-6">
+      <div className="col-span-12 lg:col-span-4 space-y-6">
+        {isPreview && (
+          <div className="bg-blue-600/20 border border-blue-500 text-blue-400 px-4 py-1 rounded-full text-[10px] font-black animate-pulse uppercase tracking-widest">
+            Coordinate Locked - Waiting for others
+          </div>
+        )}
+
         <RoomDisplay
           gameState={gameState}
-          onMove={(dir) => {
-            // Logic การส่ง socket.emit เดิมของคุณ
-            socket.emit("player_move", {
-              roomId,
-              targetPos: calculateNextPos(gameState.yourPos, dir),
-            });
-          }}
+          onMove={handleMove}
+          disabled={gameState.hasMoved}
           onOpenModal={() => setIsModalOpen(true)}
         />
 
-        {/* Room Number & Heard Noise Warning */}
-        <div className="relative aspect-video bg-zinc-950 border-x-4 border-red-600 rounded-3xl flex flex-col items-center justify-center shadow-2xl">
-          <h2 className="text-9xl font-black italic">{gameState.roomNumber}</h2>
-        </div>
+        {/* ✅ ปุ่ม Ready For Next Turn (จะปรากฏเมื่อจบเทิร์น) */}
+        {gameState.turnProcessed && (
+          <div className="w-full max-w-125 mx-auto bg-zinc-900 border-2 border-zinc-800 rounded-3xl p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4">
+            <div className="text-center space-y-4">
+              <h3 className="text-xl font-black text-white tracking-tight italic">
+                {isLocalReady ? "STANDBY FOR ENTRY" : "TURN CONCLUDED"}
+              </h3>
 
-        {/* Navigation */}
-        <div className="flex justify-center">
-          <Controls gameState={gameState} roomId={roomId} />
-        </div>
+              {/* Progress Bar แสดงจำนวนคน Ready */}
+              <div className="relative h-4 bg-zinc-800 rounded-full overflow-hidden border border-zinc-700">
+                <div
+                  className="absolute left-0 top-0 h-full bg-green-500 transition-all duration-500 shadow-[0_0_15px_rgba(34,197,94,0.5)]"
+                  style={{
+                    width: `${(readyInfo.readyCount / readyInfo.totalCount) * 100}%`,
+                  }}
+                />
+              </div>
+
+              <div className="flex justify-between text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                <span>Waiting for squad</span>
+                <span className="text-green-500">
+                  {readyInfo.readyCount} / {readyInfo.totalCount} READY
+                </span>
+              </div>
+
+              {!isLocalReady ? (
+                <button
+                  onClick={handleReadyClick}
+                  className="w-full bg-green-600 hover:bg-green-500 text-white py-4 rounded-xl font-black text-lg transition-transform active:scale-95 shadow-lg shadow-green-900/20 flex items-center justify-center gap-2"
+                >
+                  READY FOR NEXT TURN
+                </button>
+              ) : (
+                <div className="w-full py-4 bg-zinc-800/50 rounded-xl border border-dashed border-zinc-700 text-zinc-500 font-bold flex items-center justify-center gap-3">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-ping" />
+                  WAITING FOR OTHERS...
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 3. Right Sidebar: Discovery Log & Proximity Chat */}
       <div className="col-span-12 lg:col-span-3 space-y-4">
         {/* Discovery Log Component */}
-        <div className="bg-zinc-900 rounded-xl border border-zinc-800 h-64 overflow-hidden flex flex-col">
-          <div className="p-3 bg-zinc-800 text-[10px] font-bold text-zinc-400 uppercase">
-            Discovery Log
-          </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-2">
-            {turnLog.map((log, i) => (
-              <div
-                key={`${log.turn}-${i}`}
-                className="p-2 bg-zinc-950 rounded border-l-2 border-red-600 flex justify-between"
-              >
-                <span className="text-zinc-500 text-[10px]">T#{log.turn}</span>
-                <span className="font-bold text-sm">ห้อง {log.room}</span>
-              </div>
-            ))}
-          </div>
+        <div className="flex-1 max-h-[400px] flex flex-col overflow-y-auto p-3 space-y-4">
+          {turnLog.map((log) => (
+            <LogItem key={`${log.type}-${log.turn}`} log={log} />
+          ))}
         </div>
 
         <ProximityChat
@@ -142,6 +237,12 @@ export default function GameBoard({ gameState, roomId }: any) {
           </div>
         </div>
       )}
+
+      <SubmissionModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSubmit={handleFinalSubmit}
+      />
     </div>
   );
 }

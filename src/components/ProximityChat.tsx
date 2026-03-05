@@ -30,7 +30,7 @@ export default function ProximityChat({ roomId, metPlayers }: any) {
   };
 
   return (
-    <div className="w-full md:w-80 h-125 bg-zinc-900 border border-zinc-800 rounded-2xl flex flex-col overflow-hidden shadow-2xl">
+    <div className="w-full md:w-80 h-100 bg-zinc-900 border border-zinc-800 rounded-2xl flex flex-col overflow-hidden shadow-2xl">
       {/* Header แชท */}
       <div className="p-4 bg-zinc-800/50 border-b border-zinc-800 flex items-center justify-between">
         <div className="flex items-center gap-2">

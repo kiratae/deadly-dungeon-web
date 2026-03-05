@@ -7,78 +7,96 @@ import {
   ChevronRight,
   ShieldAlert,
   Trophy,
+  CheckCircle2,
 } from "lucide-react";
 
 interface RoomDisplayProps {
   gameState: any;
   onMove: (dir: string) => void;
   onOpenModal: () => void;
+  disabled: boolean;
 }
 
-const RoomDisplay = ({ gameState, onMove, onOpenModal }: RoomDisplayProps) => {
+const RoomDisplay = ({
+  gameState,
+  onMove,
+  onOpenModal,
+  disabled,
+}: RoomDisplayProps) => {
   const { roomNumber, doors, isAnswerRoom, heardNoise } = gameState;
 
   return (
     <div
-      className={`relative aspect-square max-w-[500px] w-full mx-auto bg-zinc-950 border-4 rounded-[3rem] flex items-center justify-center shadow-2xl overflow-hidden transition-all duration-700
+      className={`relative aspect-square max-w-125 w-full mx-auto bg-zinc-950 border-4 rounded-[3rem] flex items-center justify-center shadow-2xl overflow-hidden transition-all duration-700
       ${isAnswerRoom ? "border-yellow-600 shadow-yellow-900/20" : "border-zinc-900 shadow-black/50"}`}
     >
+      {disabled && !gameState.turnProcessed && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/20 pointer-events-none">
+          <div className="bg-zinc-900/90 border border-zinc-700 px-4 py-2 rounded-xl flex items-center gap-2">
+            <CheckCircle2 className="text-green-500" size={16} />
+            <span className="text-[10px] font-bold text-white">
+              POSITION SUBMITTED
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* 💡 Ambient Light */}
       <div
-        className={`absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-transparent to-transparent
+        className={`absolute inset-0 bg-[radial-gradient(circle_at_center,var(--tw-gradient-stops))] from-transparent to-transparent
         ${isAnswerRoom ? "via-yellow-500/5" : "via-zinc-800/10"}`}
       />
 
       {/* 🚪 North Door */}
       <button
-        disabled={!doors.N}
+        disabled={disabled || !doors.N}
         onClick={() => onMove("N")}
         className={`absolute top-0 w-full h-24 flex flex-col items-center pt-4 transition-all
-          ${doors.N ? "text-red-500 hover:bg-red-500/10 hover:pt-2" : "text-zinc-800 opacity-20 cursor-not-allowed"}`}
+          ${!disabled && doors.N ? "text-red-500 hover:bg-red-500/10" : "text-zinc-800 opacity-20 cursor-not-allowed"}`}
       >
-        <ChevronUp size={48} className={doors.N ? "animate-bounce" : ""} />
-        <span className="text-[10px] font-black tracking-[0.2em] mt-1">
-          NORTH
-        </span>
+        <ChevronUp
+          size={48}
+          className={!disabled && doors.N ? "animate-n" : ""}
+        />
       </button>
 
       {/* 🚪 West Door */}
       <button
-        disabled={!doors.W}
+        disabled={disabled || !doors.W}
         onClick={() => onMove("W")}
         className={`absolute left-0 h-full w-24 flex items-center pl-4 transition-all
-          ${doors.W ? "text-red-500 hover:bg-red-500/10 hover:pl-2" : "text-zinc-800 opacity-20 cursor-not-allowed"}`}
+          ${!disabled && doors.W ? "text-red-500 hover:bg-red-500/10" : "text-zinc-800 opacity-20 cursor-not-allowed"}`}
       >
-        <ChevronLeft size={48} />
-        <span className="text-[10px] font-black tracking-[0.2em] -rotate-90 origin-left ml-6">
-          WEST
-        </span>
+        <ChevronLeft
+          size={48}
+          className={!disabled && doors.W ? "animate-w" : ""}
+        />
       </button>
 
       {/* 🚪 East Door */}
       <button
-        disabled={!doors.E}
+        disabled={disabled || !doors.E}
         onClick={() => onMove("E")}
         className={`absolute right-0 h-full w-24 flex items-center justify-end pr-4 transition-all
-          ${doors.E ? "text-red-500 hover:bg-red-500/10 hover:pr-2" : "text-zinc-800 opacity-20 cursor-not-allowed"}`}
+          ${!disabled && doors.E ? "text-red-500 hover:bg-red-500/10" : "text-zinc-800 opacity-20 cursor-not-allowed"}`}
       >
-        <span className="text-[10px] font-black tracking-[0.2em] rotate-90 origin-right mr-6">
-          EAST
-        </span>
-        <ChevronRight size={48} />
+        <ChevronRight
+          size={48}
+          className={!disabled && doors.E ? "animate-e" : ""}
+        />
       </button>
 
       {/* 🚪 South Door */}
       <button
-        disabled={!doors.S}
+        disabled={disabled || !doors.S}
         onClick={() => onMove("S")}
         className={`absolute bottom-0 w-full h-24 flex flex-col items-center justify-end pb-4 transition-all
-          ${doors.S ? "text-red-500 hover:bg-red-500/10 hover:pb-2" : "text-zinc-800 opacity-20 cursor-not-allowed"}`}
+          ${!disabled && doors.S ? "text-red-500 hover:bg-red-500/10" : "text-zinc-800 opacity-20 cursor-not-allowed"}`}
       >
-        <span className="text-[10px] font-black tracking-[0.2em] mb-1">
-          SOUTH
-        </span>
-        <ChevronDown size={48} />
+        <ChevronDown
+          size={48}
+          className={!disabled && doors.S ? "animate-s" : ""}
+        />
       </button>
 
       {/* 🔢 Room Content */}

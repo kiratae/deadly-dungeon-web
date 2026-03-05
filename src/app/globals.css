@@ -19,8 +19,45 @@
   }
 }
 
+/* North: เด้งขึ้น */
+@keyframes bounce-north {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-25%); }
+}
+
+/* South: เด้งลง */
+@keyframes bounce-south {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(25%); }
+}
+
+/* East: เด้งขวา */
+@keyframes bounce-east {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(25%); }
+}
+
+/* West: เด้งซ้าย */
+@keyframes bounce-west {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(-25%); }
+}
+
+/* สร้าง Class ให้เรียกใช้ง่ายและกำหนดเวลาให้เท่ากัน (1s) */
+.animate-n { animation: bounce-north 1s infinite ease-in-out; }
+.animate-s { animation: bounce-south 1s infinite ease-in-out; }
+.animate-e { animation: bounce-east 1s infinite ease-in-out; }
+.animate-w { animation: bounce-west 1s infinite ease-in-out; }
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+.room-locked {
+  filter: grayscale(0.8) contrast(1.2);
+  pointer-events: none;
+  opacity: 0.5;
+  transition: all 0.5s ease;
 }
