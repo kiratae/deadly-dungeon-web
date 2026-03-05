@@ -31,6 +31,7 @@ export default function Home() {
     });
 
     socket.on("turn_result", (data) => {
+      console.log("ผลลัพธ์เทิร์น:", data);
       setGameState((prev: any) => ({ ...prev, ...data }));
     });
 

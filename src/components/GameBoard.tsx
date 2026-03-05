@@ -2,19 +2,61 @@
 import { useState, useEffect } from "react";
 import { socket } from "@/lib/socket";
 import Controls from "./Controls";
-import { Timer, UserCheck, Compass, DoorOpen, Ghost } from "lucide-react";
+import {
+  Timer,
+  UserCheck,
+  History,
+  DoorOpen,
+  Ghost,
+  ShieldAlert,
+} from "lucide-react";
+import RoomDisplay from "./RoomDisplay";
+import ProximityChat from "./ProximityChat";
+import DigitalNote from "./DigitalNote";
 
 export default function GameBoard({ gameState, roomId }: any) {
   const [pendingPlayers, setPendingPlayers] = useState<string[]>([]);
+  // โครงสร้างของข้อมูลที่จด: { "x-y": { id: "12", doors: { N: true, E: false, ... } } }
+  const [notes, setNotes] = useState<{ [key: string]: any }>({});
+  const [turnLog, setTurnLog] = useState<any[]>([]); // สำหรับเก็บประวัติรายเทิร์น
+  const [showTurnPopup, setShowTurnPopup] = useState(false); // สำหรับ Popup แจ้งเตือน
+
+  useEffect(() => {
+    if (!gameState.turnNumber || !gameState.roomNumber) return;
+
+    setTurnLog((prev) => {
+      // 🛡️ ตรวจสอบก่อนว่าเทิร์นนี้ถูกบันทึกไปแล้วหรือยัง
+      const isAlreadyLogged = prev.some(
+        (log) => log.turn === gameState.turnNumber,
+      );
+
+      if (isAlreadyLogged) {
+        return prev; // ถ้ามีแล้ว ไม่ต้องทำอะไร ส่ง State เดิมกลับไป
+      }
+
+      // ถ้ายังไม่มี ให้สร้าง Entry ใหม่
+      const newEntry = {
+        turn: gameState.turnNumber,
+        room: gameState.roomNumber,
+        doors: gameState.doors,
+      };
+
+      return [newEntry, ...prev];
+    });
+
+    // แสดง Popup แจ้งเทิร์นใหม่
+    setShowTurnPopup(true);
+    const timer = setTimeout(() => setShowTurnPopup(false), 2000);
+
+    return () => clearTimeout(timer);
+  }, [gameState.turnNumber, gameState.roomNumber, gameState.doors]); // ตรวจสอบทั้งคู่เพื่อความแม่นยำ
 
   useEffect(() => {
     if (gameState.pendingPlayers) {
-      setPendingPlayers(gameState.pendingPlayers.filter((p: string) => p !== socket.id));
+      setPendingPlayers(
+        gameState.pendingPlayers.filter((p: string) => p !== socket.id),
+      );
     }
-
-    return () => {
-      socket.off("waiting_update");
-    };
   }, [gameState.pendingPlayers]);
 
   useEffect(() => {
@@ -27,119 +69,79 @@ export default function GameBoard({ gameState, roomId }: any) {
   }, []);
 
   return (
-    <div className="flex flex-col items-center gap-6 w-full max-w-lg">
-      {/* 📊 Turn Info & Status Bar */}
-      <div className="w-full flex justify-between items-center bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800">
-        <div className="flex items-center gap-2">
-          <div className="bg-red-600 p-2 rounded-lg">
-            <Timer size={18} />
-          </div>
-          <div>
-            <p className="text-[10px] text-zinc-500 uppercase font-bold">
-              เทิร์นปัจจุบัน
-            </p>
-            <p className="text-xl font-black font-mono">
-              #{gameState.turnNumber || 1}
-            </p>
-          </div>
-        </div>
-
-        {pendingPlayers.length > 0 && (
-          <div className="flex flex-col items-end">
-            <p className="text-[10px] text-zinc-500 uppercase font-bold mb-1">
-              กำลังรอ...
-            </p>
-            <div className="flex -space-x-2">
-              {pendingPlayers.map((name, i) => (
-                <div
-                  key={i}
-                  title={name}
-                  className="w-8 h-8 rounded-full bg-zinc-700 border-2 border-zinc-900 flex items-center justify-center text-[10px] font-bold text-red-400"
-                >
-                  {name.substring(0, 2)}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+    <div className="mmax-w-[1400px] mx-auto grid grid-cols-12 gap-6 p-6">
+      {/* 1. Left Sidebar: Digital Mapping */}
+      <div className="col-span-12 lg:col-span-3">
+        <DigitalNote
+          notes={notes}
+          onNoteChange={(x, y, data) =>
+            setNotes((prev) => ({ ...prev, [`${x}-${y}`]: data }))
+          }
+        />
       </div>
 
-      {/* 🏰 ห้องปัจจุบัน (Current Room Card) */}
-      <div className="w-full aspect-square md:aspect-video bg-zinc-900 border-4 border-zinc-800 rounded-3xl flex flex-col items-center justify-center relative overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
-        {/* เอฟเฟกต์หมอก/ความมืด */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-60" />
+      {/* 2. Center: Game Core (Room Display & Controls) */}
+      <div className="col-span-12 lg:col-span-6 space-y-6">
+        <RoomDisplay
+          gameState={gameState}
+          onMove={(dir) => {
+            // Logic การส่ง socket.emit เดิมของคุณ
+            socket.emit("player_move", {
+              roomId,
+              targetPos: calculateNextPos(gameState.yourPos, dir),
+            });
+          }}
+          onOpenModal={() => setIsModalOpen(true)}
+        />
 
-        <h3 className="text-zinc-500 uppercase text-xs font-bold tracking-[0.3em] mb-2 z-10">
-          ห้องหมายเลข
-        </h3>
-        <span className="text-8xl font-black text-white z-10 drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
-          {gameState.roomNumber}
-        </span>
-
-        {/* แจ้งเตือนเสียงกึกกัก */}
-        {gameState.heardNoise && (
-          <div className="absolute top-6 px-4 py-1 bg-red-600/20 border border-red-500 rounded-full text-red-500 text-[10px] font-bold animate-pulse z-10">
-            ⚠️ ได้ยินเสียงกึกกักรอบห้อง...
-          </div>
-        )}
-      </div>
-
-      {/* 🧭 ข้อมูลประตูและสถานะ */}
-      <div className="grid grid-cols-2 gap-4 w-full">
-        <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800 flex items-center gap-4">
-          <div className="p-3 bg-zinc-800 rounded-xl text-zinc-400">
-            <DoorOpen size={24} />
-          </div>
-          <div>
-            <p className="text-[10px] text-zinc-500 uppercase font-bold">
-              ประตูที่พบ
-            </p>
-            <p className="text-sm font-bold">
-              {[
-                gameState.doors.N && "เหนือ",
-                gameState.doors.E && "ตะวันออก",
-                gameState.doors.S && "ใต้",
-                gameState.doors.W && "ตะวันตก",
-              ]
-                .filter(Boolean)
-                .join(", ") || "ไม่มีทางไปต่อ"}
-            </p>
-          </div>
+        {/* Room Number & Heard Noise Warning */}
+        <div className="relative aspect-video bg-zinc-950 border-x-4 border-red-600 rounded-3xl flex flex-col items-center justify-center shadow-2xl">
+          <h2 className="text-9xl font-black italic">{gameState.roomNumber}</h2>
         </div>
 
-        <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800 flex items-center gap-4">
-          <div className="p-3 bg-zinc-800 rounded-xl text-zinc-400">
-            <Ghost size={24} />
-          </div>
-          <div>
-            <p className="text-[10px] text-zinc-500 uppercase font-bold">
-              สถานะ
-            </p>
-            <p className="text-sm font-bold text-green-500">ยังมีชีวิตอยู่</p>
-          </div>
+        {/* Navigation */}
+        <div className="flex justify-center">
+          <Controls gameState={gameState} roomId={roomId} />
         </div>
       </div>
 
-      {/* 📜 รายชื่อสถานะแบบละเอียด (ด้านล่าง) */}
-      {pendingPlayers.length > 0 && (
-        <div className="w-full p-4 bg-yellow-500/5 border border-yellow-500/20 rounded-xl text-center">
-          <p className="text-yellow-500 text-xs font-medium flex items-center justify-center gap-2">
-            <UserCheck size={14} />
-            ตอนนี้เหลือคุณ{" "}
-            <span className="font-bold underline">
-              {pendingPlayers.join(", ")}
-            </span>{" "}
-            ยังไม่ได้เดิน
-          </p>
+      {/* 3. Right Sidebar: Discovery Log & Proximity Chat */}
+      <div className="col-span-12 lg:col-span-3 space-y-4">
+        {/* Discovery Log Component */}
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 h-64 overflow-hidden flex flex-col">
+          <div className="p-3 bg-zinc-800 text-[10px] font-bold text-zinc-400 uppercase">
+            Discovery Log
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-2">
+            {turnLog.map((log, i) => (
+              <div
+                key={`${log.turn}-${i}`}
+                className="p-2 bg-zinc-950 rounded border-l-2 border-red-600 flex justify-between"
+              >
+                <span className="text-zinc-500 text-[10px]">T#{log.turn}</span>
+                <span className="font-bold text-sm">ห้อง {log.room}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <ProximityChat
+          roomId={roomId}
+          metPlayers={gameState.metPlayers || []}
+        />
+      </div>
+
+      {/* 🔔 Turn Popup (แสดงเมื่อเปลี่ยนเทิร์น) */}
+      {showTurnPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="bg-red-600 text-white px-12 py-6 rounded-2xl shadow-[0_0_50px_rgba(220,38,38,0.5)] animate-in zoom-in duration-300 text-center">
+            <h2 className="text-sm uppercase tracking-[0.5em] font-bold opacity-80">
+              เริ่มต้นเทิร์นใหม่
+            </h2>
+            <p className="text-6xl font-black">TURN {gameState.turnNumber}</p>
+          </div>
         </div>
       )}
-
-      {/* 🕹️ ปุ่มควบคุมการเดิน */}
-      <Controls gameState={gameState} roomId={roomId} />
-
-      <p className="text-zinc-600 text-[10px] italic text-center">
-        &quot;จดเลขห้องและประตูไว้ให้ดี... เพราะไม่มีใครบอกทางกลับให้คุณ&quot;
-      </p>
     </div>
   );
 }
